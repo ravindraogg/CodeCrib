@@ -22,7 +22,12 @@ const io = new Server(server, {
   }
 });
 
-app.use(cors());
+app.use(cors({
+  origin: "https://code-crib.netlify.app",
+  methods: ["GET", "POST", "DELETE"],
+  credentials: true
+}));
+
 app.use(express.json());
 app.use('/uploads', express.static('Uploads'));
 
