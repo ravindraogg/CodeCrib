@@ -1,0 +1,329 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Montserrat', sans-serif;
+}
+
+body {
+  background: #30302E;
+}
+
+.container {
+  width: 100%;
+  min-height: 100vh;
+  background: #30302E;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 80px; 
+}
+
+.header {
+  width: 100%;
+  padding: 15px 30px;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 0px 0px 20px 20px;
+  border: 2px solid #000;
+  background: rgba(255, 255, 255, 0.88) !important; 
+  backdrop-filter: blur(10px);
+  z-index: 999;
+  position: fixed; 
+  top: 0;
+  left: 0;
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+  color: #000;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 30px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 15px;
+}
+
+.btn-login, 
+.btn-home {
+  padding: 5px 0;
+  border-radius: 10px;
+  border: 1px solid #000;
+  width: 86px;
+  height: 30px;
+  flex-shrink: 0;
+  color: #000;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: normal;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-login:hover, 
+.btn-home:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.register-container {
+  width: 450px;
+  margin: 20px auto;
+  padding: 40px;
+  border-radius: 10px;
+  border: 1px solid #FFF;
+  color: white;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #FFF;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 40px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: normal;
+}
+
+.input-group {
+  margin-bottom: 25px;
+  position: relative;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: #FFF;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 500;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  width: 100%;
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid #FFF;
+  background-color: #30302E;
+  color: #AEAEAE;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+  transition: all 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
+  border-color: #FFFFFF;
+  outline: none;
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+}
+
+.profile-upload {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 30px 0;
+}
+
+.profile-circle {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 1px solid #FFF;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.upload-btn-wrapper {
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+  border-radius: 10px;
+  border: 1px solid #FFF;
+  padding: 5px;
+}
+
+.btn-upload {
+  color: #FFF;
+  background-color: transparent;
+  padding: 8px 20px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+  border: none;
+}
+
+.upload-btn-wrapper input[type=file] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 25px;
+  color: #FFF;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  position: relative;
+}
+
+.remember-me .checkbox-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.remember-me input[type="checkbox"] {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.checkmark {
+  height: 24px;
+  width: 24px;
+  background-color: transparent;
+  border: 2px solid #FFF;
+  border-radius: 4px;
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remember-me input[type="checkbox"]:checked ~ .checkmark {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+  left: 8px;
+  top: 4px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.remember-me input[type="checkbox"]:checked ~ .checkmark:after {
+  display: block;
+}
+
+.btn-register {
+  width: 100%;
+  padding: 15px;
+  background-color: #30302E;
+  border-radius: 10px;
+  border: 1px solid #FFF;
+  color: #FFF;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-register:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.loading-bar {
+  width: 100%;
+  height: 5px;
+  background-color: #f0f0f0;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.loading-progress {
+  width: 100%;
+  height: 100%;
+  background-color: white;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.loading-btn {
+  position: relative;
+  color: transparent !important;
+}
+
+.loading-btn::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-top: -8px;
+  margin-left: -8px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
