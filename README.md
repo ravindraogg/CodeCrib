@@ -35,7 +35,7 @@ Ideal for **pair programming**, **interviews**, and **team projects**.
 | Frontend         | Backend             | Realtime           | Storage / Database      |
 |------------------|----------------------|--------------------|--------------------------|
 | React.js + Tailwind CSS | Node.js + Express.js | Socket.IO          | MongoDB (for metadata)   |
-| Vite (optional for fast dev) | Multer (for file uploads) | WebSocket Protocol | Local Disk / AWS S3 (future) |
+| Vite Reactjs | Multer (for file uploads) | WebSocket Protocol | Local Disk / AWS S3 (future) |
 | Monaco Editor / CodeMirror | CORS Middleware | Room Events | Firebase Auth (optional) |
 
 ---
@@ -46,7 +46,6 @@ Ideal for **pair programming**, **interviews**, and **team projects**.
 - 📂 **File Upload** (only valid code files ≤ 20MB).
 - 🚫 **No ZIPs or Folders** upload.
 - 🔄 **Real-Time Code Editing** with live synchronization.
-- 🎨 **Syntax Highlighted Code Editor**.
 - 🛡️ **File Type and Size Validation**.
 
 ---
@@ -92,14 +91,11 @@ Ideal for **pair programming**, **interviews**, and **team projects**.
     /src
         /components
         /pages
-        /utils
     index.html
-    tailwind.config.js
+    vite.config.js
 
 /backend
-    /controllers
-    /routes
-    /sockets
+    /file
     /uploads
     server.js
 ```
@@ -124,11 +120,9 @@ This project is licensed under the **MIT License**.
 
 ## 🔖 Badges
 
-![GitHub Repo stars](https://img.shields.io/github/stars/your-username/codecrib?style=social)
-![GitHub forks](https://img.shields.io/github/forks/your-username/codecrib?style=social)
-![GitHub issues](https://img.shields.io/github/issues/your-username/codecrib)
-![GitHub license](https://img.shields.io/github/license/your-username/codecrib)
+![GitHub Repo stars](https://img.shields.io/github/stars/ravindraogg/codecrib?style=social)
+![GitHub forks](https://img.shields.io/github/forks/ravindraogg/codecrib?style=social)
+![GitHub issues](https://img.shields.io/github/issues/ravindraogg/codecrib)
+![GitHub license](https://img.shields.io/github/license/ravindraogg/codecrib)
 
 ---
-
-> Crafted with ❤️ by **Ravindra boss** 🫡
