@@ -39,15 +39,16 @@ codeSession.invite('your-team');`;
           i++;
           timeout = setTimeout(typing, Math.random() * 50 + 10);
         } else {
-          setTypedCode(finalCode);
+          setTypedCode(finalCode); // Ensure final text is set
           if (codeRef.current && window.hljs) {
             window.hljs.highlightElement(codeRef.current);
           }
-          setIsAnimationComplete(true);
+          setIsAnimationComplete(true); // Mark animation as complete
         }
       };
       typing();
 
+      // Cursor blink after typing starts
       const blinkCursor = () => {
         setShowCursor(prev => !prev);
         cursorTimeout = setTimeout(blinkCursor, 500);
@@ -57,12 +58,13 @@ codeSession.invite('your-team');`;
 
     const initialTimeout = setTimeout(typeCode, 1000);
 
+    // Cleanup to prevent memory leaks
     return () => {
       clearTimeout(initialTimeout);
       clearTimeout(timeout);
       clearTimeout(cursorTimeout);
     };
-  }, []); 
+  }, []); // Runs once on mount
 
   useEffect(() => {
     const codeWindow = codeContainerRef.current;
