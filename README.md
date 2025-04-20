@@ -4,7 +4,7 @@
 
 # ✨ CodeCrib
 
-Welcome to **CodeCrib** — A real-time collaborative coding platform where developers can create private rooms, share code files (≤ 20MB), and collaborate seamlessly!
+Welcome to **CodeCrib** — A real-time collaborative coding platform where developers can create private rooms, share code files, and collaborate seamlessly!
 
 ---
 
@@ -34,9 +34,9 @@ Ideal for **pair programming**, **interviews**, and **team projects**.
 
 | Frontend         | Backend             | Realtime           | Storage / Database      |
 |------------------|----------------------|--------------------|--------------------------|
-| React.js + Tailwind CSS | Node.js + Express.js | Socket.IO          | MongoDB (for metadata)   |
-| Vite Reactjs | Multer (for file uploads) | WebSocket Protocol | Local Disk / AWS S3 (future) |
-| Monaco Editor / CodeMirror | CORS Middleware | Room Events | Firebase Auth (optional) |
+| React.js + TypeScript | Node.js + Express.js | Socket.IO          | MongoDB (for metadata)   |
+| Vite Reactjs | Multer (for file uploads) | WebSocket Protocol | Local Disk |
+| Monaco Editor / CodeMirror | CORS Middleware | Room Events | Memory Storage |
 
 ---
 
