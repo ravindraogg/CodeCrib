@@ -707,6 +707,9 @@ const Room: React.FC = () => {
             </div>
           </div>
 
+
+
+
           <div className="sidebar-section">
             <h3>Room Participants ({participants.length})</h3>
             {participants.map((p) => (
@@ -725,7 +728,7 @@ const Room: React.FC = () => {
                           nextElement.style.display = 'block';
                         }
                       }}
-                    />
+                    />  
                   ) : null}
                   <svg 
                     viewBox="0 0 24 24" 

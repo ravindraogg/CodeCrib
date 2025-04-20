@@ -7,9 +7,8 @@ const Home = () => {
   const codeRef = useRef<HTMLElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const [typedCode, setTypedCode] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const [showCursor, setShowCursor] = useState(true);
-  const scriptRef = useRef<HTMLScriptElement | null>(null);
+  const [isAnimationComplete, setIsAnimationComplete] = useState(false);
 
   const finalCode = `function initCodeCrib() {
   const room = new CodeRoom({
@@ -30,10 +29,9 @@ codeSession.invite('your-team');`;
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
-    let cursorInterval: ReturnType<typeof setInterval>;
-    
+    let cursorTimeout: ReturnType<typeof setTimeout>;
+
     const typeCode = () => {
-      setIsTyping(true);
       let i = 0;
       const typing = () => {
         if (i < finalCode.length) {
@@ -41,51 +39,31 @@ codeSession.invite('your-team');`;
           i++;
           timeout = setTimeout(typing, Math.random() * 50 + 10);
         } else {
-          setIsTyping(false);
-          
-          setTimeout(() => {
-            if (codeRef.current && window.hljs) {
-              window.hljs.highlightElement(codeRef.current);
-            }
-          }, 100);
-          
-          setTimeout(() => {
-            setTypedCode('');
-            setTimeout(typeCode, 1000);
-          }, 7000);
+          setTypedCode(finalCode);
+          if (codeRef.current && window.hljs) {
+            window.hljs.highlightElement(codeRef.current);
+          }
+          setIsAnimationComplete(true);
         }
       };
       typing();
+
+      const blinkCursor = () => {
+        setShowCursor(prev => !prev);
+        cursorTimeout = setTimeout(blinkCursor, 500);
+      };
+      blinkCursor();
     };
 
-    cursorInterval = setInterval(() => {
-      setShowCursor(prev => !prev);
-    }, 500);
-
     const initialTimeout = setTimeout(typeCode, 1000);
-
-    if (!scriptRef.current) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';
-      script.onload = () => {
-        if (codeRef.current && typedCode === finalCode && window.hljs) {
-          window.hljs.highlightElement(codeRef.current);
-        }
-      };
-      document.body.appendChild(script);
-      scriptRef.current = script;
-    }
 
     return () => {
       clearTimeout(initialTimeout);
       clearTimeout(timeout);
-      clearInterval(cursorInterval);
-      
-      if (scriptRef.current && document.body.contains(scriptRef.current)) {
-        document.body.removeChild(scriptRef.current);
-      }
+      clearTimeout(cursorTimeout);
     };
-  }, []);
+  }, []); 
+
   useEffect(() => {
     const codeWindow = codeContainerRef.current;
     if (!codeWindow) return;
@@ -179,7 +157,7 @@ codeSession.invite('your-team');`;
             <div className="code-content">
               <pre>
                 <code ref={codeRef} className="javascript">
-                  {typedCode}{isTyping && showCursor ? '|' : ''}
+                  {typedCode}{isAnimationComplete && showCursor ? '|' : ''}
                 </code>
               </pre>
             </div>
@@ -263,6 +241,7 @@ codeSession.invite('your-team');`;
     </div>
   );
 };
+
 declare global {
   interface Window {
     hljs: any;

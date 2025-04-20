@@ -450,6 +450,7 @@ const MainPage: React.FC = () => {
         <div className="user-name">{user.name}</div>
       </div>
 
+
       <div className="join-room-container">
         <h3>Join Room</h3>
         <input
