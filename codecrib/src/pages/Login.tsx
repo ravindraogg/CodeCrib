@@ -1,7 +1,7 @@
 import React, { useState, ChangeEvent } from 'react';
 import './Login.css';
 import { Link, useNavigate } from 'react-router-dom';
-const base = import.meta.env.VITE_API_ENDPOINT
+const base = import.meta.env.VITE_API_ENDPOINT;
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -11,7 +11,7 @@ const Login: React.FC = () => {
   });
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false); 
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const navigate = useNavigate();
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -26,7 +26,19 @@ const Login: React.FC = () => {
     e.preventDefault();
     setError('');
     setSuccess('');
-    setIsLoading(true); 
+    setIsLoading(true);
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setError('Please enter a valid email address.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${base}/api/login`, {
@@ -38,22 +50,22 @@ const Login: React.FC = () => {
       });
 
       const result = await response.json();
-      setIsLoading(false); 
+      setIsLoading(false);
 
       if (response.ok) {
         localStorage.setItem('token', result.token);
-        setSuccess('Login successful! Redirecting...');
-        setTimeout(() => navigate('/main'), 1500); 
+        setSuccess('Login successful! You will be redirected to your dashboard shortly.');
+        setTimeout(() => navigate('/main'), 2000);
       } else {
         if (result.message === 'Invalid email or password') {
           setError('The email or password you entered is incorrect. Please try again.');
         } else {
-          setError(result.message || 'Something went wrong. Please try again.');
+          setError(result.message || 'An error occurred during login. Please try again.');
         }
       }
     } catch (err) {
-      setIsLoading(false); 
-      setError('Failed to connect to the server. Please check your internet connection.');
+      setIsLoading(false);
+      setError('Failed to connect to the server. Please check your internet connection and try again.');
     }
   };
 
@@ -90,11 +102,11 @@ const Login: React.FC = () => {
               type="email"
               id="email"
               name="email"
-              placeholder="example@gmail.com"
+              placeholder="Enter your email"
               value={formData.email}
               onChange={handleChange}
               required
-              disabled={isLoading} 
+              disabled={isLoading}
             />
           </div>
 
@@ -104,7 +116,7 @@ const Login: React.FC = () => {
               type="password"
               id="password"
               name="password"
-              placeholder="********************"
+              placeholder="Enter your password"
               value={formData.password}
               onChange={handleChange}
               required
@@ -113,7 +125,7 @@ const Login: React.FC = () => {
           </div>
 
           <div className="remember-me">
-            <div className="checkbox-container">
+            <label>
               <input
                 type="checkbox"
                 id="rememberMe"
@@ -123,8 +135,8 @@ const Login: React.FC = () => {
                 disabled={isLoading}
               />
               <span className="checkmark"></span>
-            </div>
-            <label htmlFor="rememberMe">Remember me</label>
+              Remember me
+            </label>
           </div>
 
           <div className="forgot-password">

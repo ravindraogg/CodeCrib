@@ -7,18 +7,18 @@ import FileItem from '../FileItem';
 
 // Interfaces
 interface FileItemData {
-  displayName: string;
-  id: string;
+  fileId: string;
   name: string;
   lines: number;
   read: boolean;
   ext: string;
+  displayName?: string;
 }
 
 interface Participant {
   id: string;
   name: string;
-  profilePic?: string;
+  profilePicId?: string;
   online: boolean;
 }
 
@@ -35,7 +35,18 @@ interface RoomData {
   userId: string;
   mostUsedLanguage: string;
   dateTime: string;
-  files: string[];
+  files: FileItemData[];
+}
+
+interface UploadStatus {
+  fileName: string;
+  progress: number;
+}
+
+interface StatusMessage {
+  fileId: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
 }
 
 const Room: React.FC = () => {
@@ -45,6 +56,7 @@ const Room: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<FileItemData[]>([]);
+  const [fileLoadingStatus, setFileLoadingStatus] = useState<Record<string, boolean>>({});
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [currentUser, setCurrentUser] = useState<Participant | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -55,15 +67,27 @@ const Room: React.FC = () => {
   const [showPreview, setShowPreview] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<FileItemData | null>(null);
   const [newMessageCount, setNewMessageCount] = useState<number>(0);
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
+  const [statusMessages, setStatusMessages] = useState<StatusMessage[]>([]);
   const socketRef = useRef<any>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const previewCodeRef = useRef<HTMLDivElement>(null);
   const previewLinesRef = useRef<HTMLDivElement>(null);
-  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
   const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
   const [draggedFiles, setDraggedFiles] = useState<File[]>([]);
 
-  const API_URL = import.meta.env.VITE_API_ENDPOINT
+  const API_URL = import.meta.env.VITE_API_ENDPOINT;
+
+  const addStatusMessage = (fileId: string, message: string, type: StatusMessage['type']) => {
+    setStatusMessages((prev) => [
+      ...prev.filter((m) => m.fileId !== fileId),
+      { fileId, message, type },
+    ]);
+    setTimeout(() => {
+      setStatusMessages((prev) => prev.filter((m) => m.fileId !== fileId));
+    }, 3000);
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -75,39 +99,47 @@ const Room: React.FC = () => {
       try {
         setLoading(true);
         const roomResponse = await axios.get(`${API_URL}/api/rooms/${roomId}`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         setRoom(roomResponse.data);
 
-        const joinResponse = await axios.post(`${API_URL}/api/rooms/${roomId}/join`, {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const joinResponse = await axios.post(
+          `${API_URL}/api/rooms/${roomId}/join`,
+          {},
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
 
         setCurrentUser(joinResponse.data.participant);
-        setParticipants([joinResponse.data.participant]);
+        setParticipants(joinResponse.data.room.participants || []);
 
         if (roomResponse.data.files && roomResponse.data.files.length > 0) {
           const filesList = await Promise.all(
-            roomResponse.data.files.map(async (fullFileName: string, index: number) => {
-              const fileExt = fullFileName.split('.').pop() || '';
-              const capitalizedExt = fileExt.charAt(0).toUpperCase() + fileExt.slice(1);
-              const baseName = fullFileName.split('-').slice(1).join('-');
-              let lines = 0;
+            roomResponse.data.files.map(async (file: FileItemData) => {
+              setFileLoadingStatus((prev) => ({ ...prev, [file.fileId]: true }));
+              let lines = file.lines;
               try {
-                const response = await axios.get(`${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(fullFileName)}`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                });
+                const response = await axios.get(
+                  `${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`,
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                  }
+                );
                 lines = response.data.content.split('\n').length;
               } catch (error) {
-                console.error(`Error fetching lines for ${fullFileName}:`, error);
+                console.error(`Error fetching lines for ${file.name}:`, error);
+                lines = 0;
+              } finally {
+                setFileLoadingStatus((prev) => ({ ...prev, [file.fileId]: false }));
               }
               return {
-                id: `file-${index}`,
-                name: fullFileName,
+                fileId: file.fileId,
+                name: file.name,
                 lines,
-                read: false,
-                ext: capitalizedExt,
-                displayName: baseName
+                read: file.read,
+                ext: file.ext,
+                displayName: file.name.split('-').slice(1).join('-'),
               };
             })
           );
@@ -136,38 +168,35 @@ const Room: React.FC = () => {
         reconnectionDelay: 1000,
       });
 
-      socketRef.current.on('connect_error', (error: { message: any; }) => {
+      socketRef.current.on('connect_error', (error: { message: any }) => {
         console.error('Connection error:', error.message);
       });
 
       socketRef.current.emit('joinRoom', {
         roomId,
         userId: currentUser.id,
-        userName: currentUser.name
+        userName: currentUser.name,
       });
 
       socketRef.current.on('roomParticipants', (users: Participant[]) => {
-        const validUsers = users.filter(p => p.id && p.name);
+        const validUsers = users.filter((p) => p.id && p.name);
         console.log('Received roomParticipants:', validUsers);
-        console.log('Profile pics:', validUsers.map(p => ({ name: p.name, profilePic: p.profilePic })));
-        setParticipants(validUsers.filter((p, index, self) => 
-          index === self.findIndex(t => t.id === p.id)
-        ));
+        setParticipants(
+          validUsers.filter((p, index, self) => index === self.findIndex((t) => t.id === p.id))
+        );
       });
 
       socketRef.current.on('userJoined', (user: Participant) => {
         console.log('User joined:', user);
         if (user.id && user.name && user.id !== currentUser?.id) {
-          setParticipants(prev => {
-            const updated = prev.some(p => p.id === user.id)
-              ? prev.map(p => p.id === user.id ? { ...p, online: true } : p)
+          setParticipants((prev) => {
+            const updated = prev.some((p) => p.id === user.id)
+              ? prev.map((p) => (p.id === user.id ? { ...p, online: true } : p))
               : [...prev, { ...user, online: true }];
-            return updated.filter((p, index, self) => 
-              index === self.findIndex(t => t.id === p.id)
-            );
+            return updated.filter((p, index, self) => index === self.findIndex((t) => t.id === p.id));
           });
-          setMessages(prev => {
-            if (prev.some(m => m.id === `system-join-${user.id}`)) return prev;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === `system-join-${user.id}`)) return prev;
             return [
               ...prev,
               {
@@ -175,47 +204,47 @@ const Room: React.FC = () => {
                 sender: 'System',
                 senderId: 'system',
                 text: `${user.name} joined the room`,
-                timestamp: new Date().toISOString()
-              }
+                timestamp: new Date().toISOString(),
+              },
             ];
           });
           updateNewMessageCount();
         }
       });
 
-      socketRef.current.on('userLeft', (user: { userId: string, name: string }) => {
+      socketRef.current.on('userLeft', (user: { userId: string; name: string }) => {
         console.log('User left:', user);
         if (user.userId && user.name) {
-          setParticipants(prev =>
-            prev.map(p => p.id === user.userId ? { ...p, online: false } : p)
+          setParticipants((prev) =>
+            prev.map((p) => (p.id === user.userId ? { ...p, online: false } : p))
           );
-          setMessages(prev => [
+          setMessages((prev) => [
             ...prev,
             {
               id: `system-${Date.now()}-${user.userId}`,
               sender: 'System',
               senderId: 'system',
               text: `${user.name} left the room`,
-              timestamp: new Date().toISOString()
-            }
+              timestamp: new Date().toISOString(),
+            },
           ]);
           updateNewMessageCount();
         }
       });
 
-      socketRef.current.on('userStatus', (status: { userId: string, online: boolean }) => {
+      socketRef.current.on('userStatus', (status: { userId: string; online: boolean }) => {
         console.log('User status update:', status);
         if (status.userId) {
-          setParticipants(prev =>
-            prev.map(p => p.id === status.userId ? { ...p, online: status.online } : p)
+          setParticipants((prev) =>
+            prev.map((p) => (p.id === status.userId ? { ...p, online: status.online } : p))
           );
         }
       });
 
       socketRef.current.on('message', (msg: Message) => {
-        setMessages(prev => {
+        setMessages((prev) => {
           if (!msg.id) msg.id = `${msg.senderId}-${msg.timestamp}`;
-          if (prev.some(m => m.id === msg.id)) return prev;
+          if (prev.some((m) => m.id === msg.id)) return prev;
           if (msg.senderId === currentUser?.id) return prev;
           return [...prev, msg];
         });
@@ -223,22 +252,22 @@ const Room: React.FC = () => {
       });
 
       socketRef.current.on('newFile', (file: FileItemData) => {
-        setFiles(prev => {
-          if (prev.some(f => f.id === file.id)) return prev;
-          return [...prev, { ...file, read: false }];
+        setFiles((prev) => {
+          if (prev.some((f) => f.fileId === file.fileId)) return prev;
+          return [...prev, { ...file, read: false, displayName: file.name.split('-').slice(1).join('-') }];
         });
       });
 
-      socketRef.current.on('fileRead', (data: { fileName: string, userId: string }) => {
+      socketRef.current.on('fileRead', (data: { fileName: string; userId: string }) => {
         if (data.userId === currentUser?.id) {
-          setFiles(prev =>
-            prev.map(f => f.name === data.fileName ? { ...f, read: true } : f)
+          setFiles((prev) =>
+            prev.map((f) => (f.name === data.fileName ? { ...f, read: true } : f))
           );
         }
       });
 
       socketRef.current.on('fileDelete', (data: { fileName: string }) => {
-        setFiles(prev => prev.filter(f => f.name !== data.fileName));
+        setFiles((prev) => prev.filter((f) => f.name !== data.fileName));
       });
 
       const handleVisibilityChange = () => {
@@ -263,7 +292,7 @@ const Room: React.FC = () => {
         chatContainerRef.current.scrollHeight - chatContainerRef.current.scrollTop <=
         chatContainerRef.current.clientHeight + 10;
       if (!isScrolledToBottom) {
-        setNewMessageCount(prev => prev + 1);
+        setNewMessageCount((prev) => prev + 1);
       } else {
         setNewMessageCount(0);
       }
@@ -308,7 +337,9 @@ const Room: React.FC = () => {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingFile(true);
-    const files = Array.from(event.dataTransfer.items).map(item => item.getAsFile()).filter((file): file is File => file !== null);
+    const files = Array.from(event.dataTransfer.items)
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
     setDraggedFiles(files);
   };
 
@@ -350,13 +381,14 @@ const Room: React.FC = () => {
     }
   };
 
-  const uploadFile = async (file: Blob) => {
+  const uploadFile = async (file: File) => {
     const token = localStorage.getItem('token');
     if (!token || !roomId) return;
 
     try {
-      setIsUploadingFile(true);
-      const fileName = file instanceof File ? file.name : 'file';
+      const fileName = file.name;
+      setUploadStatuses((prev) => [...prev, { fileName, progress: 0 }]);
+
       const fileExt = fileName.split('.').pop() || '';
       const capitalizedExt = fileExt.charAt(0).toUpperCase() + fileExt.slice(1);
 
@@ -365,52 +397,32 @@ const Room: React.FC = () => {
       formData.append('fileName', fileName);
       formData.append('fileExt', capitalizedExt);
 
-      const response = await axios.post(
-        `${API_URL}/api/rooms/${roomId}/files`,
-        formData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      );
-      console.log('File uploaded successfully:', response.data);
-      const roomResponse = await axios.get(`${API_URL}/api/rooms/${roomId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await axios.post(`${API_URL}/api/rooms/${roomId}/files`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+          setUploadStatuses((prev) =>
+            prev.map((status) =>
+              status.fileName === fileName ? { ...status, progress: percentCompleted } : status
+            )
+          );
+        },
       });
-      if (roomResponse.data.files) {
-        const filesList = await Promise.all(
-          roomResponse.data.files.map(async (fullFileName: string, index: number) => {
-            const fileExt = fullFileName.split('.').pop() || '';
-            const capitalizedExt = fileExt.charAt(0).toUpperCase() + fileExt.slice(1);
-            const baseName = fullFileName.split('-').slice(1).join('-');
-            let lines = 0;
-            try {
-              const response = await axios.get(`${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(fullFileName)}`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              lines = response.data.content.split('\n').length;
-            } catch (error) {
-              console.error(`Error fetching lines for ${fullFileName}:`, error);
-            }
-            return {
-              id: `file-${index}`,
-              name: fullFileName,
-              lines,
-              read: false,
-              ext: capitalizedExt,
-              displayName: baseName
-            };
-          })
-        );
-        setFiles(filesList);
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      alert('Failed to upload file. Please try again.');
-    } finally {
-      setIsUploadingFile(false);
+
+      console.log('File uploaded successfully:', response.data);
+      setUploadStatuses((prev) => prev.filter((status) => status.fileName !== fileName));
+      addStatusMessage(response.data.fileId, `Uploaded ${fileName}`, 'success');
+    } catch (error: any) {
+      console.error('Error uploading file:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      setUploadStatuses((prev) => prev.filter((status) => status.fileName !== file.name));
+      addStatusMessage(file.name, 'Failed to upload file', 'error');
     }
   };
 
@@ -422,21 +434,23 @@ const Room: React.FC = () => {
     setSelectedFile(file);
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.get(`${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get(
+        `${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       setPreviewContent(response.data.content);
       setShowPreview(true);
 
       if (!file.read) {
-        setFiles(prev =>
-          prev.map(f => f.id === file.id ? { ...f, read: true } : f)
-        );
+        setFiles((prev) => prev.map((f) => (f.fileId === file.fileId ? { ...f, read: true } : f)));
         socketRef.current?.emit('fileRead', { fileName: file.name });
       }
     } catch (error) {
       console.error('Error fetching file content:', error);
       setPreviewContent('Unable to load content');
+      addStatusMessage(file.fileId, 'Failed to load file content', 'error');
     }
   };
 
@@ -463,48 +477,60 @@ const Room: React.FC = () => {
     switch (action) {
       case 'Copy':
         try {
-          const response = await axios.get(`${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          addStatusMessage(file.fileId, 'Copying...', 'info');
+          const response = await axios.get(
+            `${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
           navigator.clipboard.writeText(response.data.content);
-          alert('File content copied!');
+          addStatusMessage(file.fileId, 'File content copied!', 'success');
         } catch (error) {
           console.error('Error copying file content:', error);
-          alert('Failed to copy file content');
+          addStatusMessage(file.fileId, 'Failed to copy file content', 'error');
         }
         break;
       case 'Download':
         try {
-          const response = await axios.get(`${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            responseType: 'blob'
-          });
+          addStatusMessage(file.fileId, 'Downloading...', 'info');
+          const response = await axios.get(
+            `${API_URL}/api/rooms/${roomId}/files/${encodeURIComponent(file.name)}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              responseType: 'blob',
+            }
+          );
           const url = window.URL.createObjectURL(new Blob([response.data]));
           const link = document.createElement('a');
           link.href = url;
-          link.setAttribute('download', file.displayName);
+          link.setAttribute('download', file.displayName || file.name);
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
           window.URL.revokeObjectURL(url);
+          addStatusMessage(file.fileId, 'File downloaded!', 'success');
         } catch (error) {
           console.error('Error downloading file:', error);
-          alert('Failed to download file');
+          addStatusMessage(file.fileId, 'Failed to download file', 'error');
         }
         break;
       case 'Mark as Read':
-        setFiles(prev =>
-          prev.map(f => f.id === file.id ? { ...f, read: !f.read } : f)
+        setFiles((prev) =>
+          prev.map((f) => (f.fileId === file.fileId ? { ...f, read: !f.read } : f))
         );
         socketRef.current?.emit('fileRead', { fileName: file.name });
+        addStatusMessage(file.fileId, file.read ? 'Marked as unread' : 'Marked as read', 'success');
         break;
       case 'Delete':
         try {
+          addStatusMessage(file.fileId, 'Deleting...', 'info');
           socketRef.current?.emit('fileDelete', { fileName: file.name });
-          setFiles(prev => prev.filter(f => f.id !== file.id));
+          setFiles((prev) => prev.filter((f) => f.fileId !== file.fileId));
+          addStatusMessage(file.fileId, 'File deleted', 'success');
         } catch (error) {
           console.error('Error deleting file:', error);
-          alert('Failed to delete file');
+          addStatusMessage(file.fileId, 'Failed to delete file', 'error');
         }
         break;
     }
@@ -519,11 +545,11 @@ const Room: React.FC = () => {
         sender: currentUser.name,
         senderId: currentUser.id,
         text: newMessage,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
       socketRef.current?.emit('message', message);
-      setMessages(prev => {
-        if (prev.some(m => m.id === message.id)) return prev;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
         return [...prev, message];
       });
       setNewMessage('');
@@ -621,29 +647,59 @@ const Room: React.FC = () => {
           ) : (
             files.map((file) => (
               <div
-                key={file.id}
-                className={`file-card ${file.read ? 'read' : ''} ${hoveredFile?.id === file.id ? 'hovered' : ''}`}
+                key={file.fileId}
+                className={`file-card ${file.read ? 'read' : ''} ${
+                  hoveredFile?.fileId === file.fileId ? 'hovered' : ''
+                }`}
                 onMouseEnter={() => handleFileMouseEnter(file)}
                 onMouseLeave={() => setHoveredFile(null)}
                 onClick={(e) => handleFileClick(file, e)}
                 onContextMenu={(e) => handleFileClick(file, e)}
               >
-                <FileItem fileName={file.displayName || file.name} />
-                <div className="file-lines">{file.lines} lines</div>
-                <div className="file-ext">{file.ext}</div>
+                {fileLoadingStatus[file.fileId] ? (
+                  <div className="file-loading">Loading...</div>
+                ) : (
+                  <>
+                    <FileItem fileName={file.displayName || file.name} />
+                    <div className="file-lines">{file.lines} lines</div>
+                    <div className="file-ext">{file.ext}</div>
+                    {statusMessages.find((m) => m.fileId === file.fileId) && (
+                      <div className={`status-message status-${statusMessages.find((m) => m.fileId === file.fileId)!.type}`}>
+                        {statusMessages.find((m) => m.fileId === file.fileId)!.message}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ))
           )}
 
           {contextMenu && (
-            <div
-              className="context-menu"
-              style={{ top: contextMenu.y - 5, left: contextMenu.x - 5 }}
-            >
-              <button className="context-btn" onClick={() => handleContextAction('Copy', contextMenu.file)}>Copy</button>
-              <button className="context-btn" onClick={() => handleContextAction('Download', contextMenu.file)}>Download</button>
-              <button className="context-btn" onClick={() => handleContextAction('Mark as Read', contextMenu.file)}>Mark as Read</button>
-              <button className="context-btn" onClick={() => handleContextAction('Delete', contextMenu.file)}>Delete</button>
+            <div className="context-menu" style={{ top: contextMenu.y - 5, left: contextMenu.x - 5 }}>
+              <button
+                className="context-btn"
+                onClick={() => handleContextAction('Copy', contextMenu.file)}
+              >
+                Copy
+              </button>
+              <button
+                className="context-btn"
+                onClick={() => handleContextAction('Download', contextMenu.file)}
+              >
+                Download
+              </button>
+              <button
+                className="context-btn"
+                onClick={() => handleContextAction('Mark as Read', contextMenu.file)}
+              >
+                Mark as Read
+              </button>
+              <button
+                className="context-btn"
+                onClick={() => handleContextAction('Delete', contextMenu.file)}
+              >
+                Delete
+              </button>
             </div>
           )}
 
@@ -652,23 +708,21 @@ const Room: React.FC = () => {
               <div className="file-preview">
                 <div className="file-preview-header">
                   <div className="file-info">
-                    <span>{selectedFile.displayName}</span>
+                    <span>{selectedFile.displayName || selectedFile.name}</span>
                     <span>Type: {selectedFile.ext}</span>
                     <span>Lines: {selectedFile.lines}</span>
                     <span>Status: {selectedFile.read ? 'Read' : 'Unread'}</span>
                   </div>
                   <button className="close-preview" onClick={closeFilePreview}>
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="#d4d4d4">
-                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                     </svg>
                   </button>
                 </div>
                 <div className="file-preview-content">
                   <div className="file-preview-lines" ref={previewLinesRef}>
                     {previewContent &&
-                      previewContent.split('\n').map((_, index) => (
-                        <div key={index}>{index + 1}</div>
-                      ))}
+                      previewContent.split('\n').map((_, index) => <div key={index}>{index + 1}</div>)}
                   </div>
                   <div className="file-preview-code" ref={previewCodeRef}>
                     <pre>{previewContent || 'Loading...'}</pre>
@@ -682,7 +736,7 @@ const Room: React.FC = () => {
             <div className="drag-drop-popup">
               <div className="drag-drop-content">
                 <svg viewBox="0 0 24 24" width="48" height="48" fill="#d4d4d4">
-                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
                 </svg>
                 <h3>Drop files here to upload</h3>
                 {draggedFiles.length > 0 && (
@@ -698,6 +752,23 @@ const Room: React.FC = () => {
               </div>
             </div>
           )}
+
+          {uploadStatuses.length > 0 && (
+            <div className="upload-progress-container">
+              {uploadStatuses.map((status) => (
+                <div key={status.fileName} className="upload-progress">
+                  <span>{status.fileName}</span>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${status.progress}%` }}
+                    ></div>
+                  </div>
+                  <span>{status.progress}%</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <aside className="sidebar">
@@ -707,41 +778,40 @@ const Room: React.FC = () => {
             </div>
           </div>
 
-
-
-
           <div className="sidebar-section">
             <h3>Room Participants ({participants.length})</h3>
             {participants.map((p) => (
               <div key={p.id} className="participant">
                 <div className="profile-pic">
-                  {p.profilePic ? (
-                    <img 
-                      src={`${API_URL}${p.profilePic}`} 
-                      alt="Profile" 
-                      className="profile-img" 
+                  {p.profilePicId ? (
+                    <img
+                      src={`${API_URL}/api/files/${p.profilePicId}`}
+                      alt="Profile"
+                      className="profile-img"
                       onError={(e) => {
-                        console.error(`Failed to load profile pic for ${p.name}: ${p.profilePic}`);
+                        console.error(`Failed to load profile pic for ${p.name}: ${p.profilePicId}`);
                         e.currentTarget.style.display = 'none';
                         const nextElement = e.currentTarget.nextSibling as HTMLElement;
                         if (nextElement) {
                           nextElement.style.display = 'block';
                         }
                       }}
-                    />  
+                    />
                   ) : null}
-                  <svg 
-                    viewBox="0 0 24 24" 
-                    fill="white" 
-                    width="24" 
-                    height="24" 
-                    style={{ display: p.profilePic ? 'none' : 'block' }}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="white"
+                    width="24"
+                    height="24"
+                    style={{ display: p.profilePicId ? 'none' : 'block' }}
                   >
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
                   </svg>
                   {p.online && <div className="online-dot"></div>}
                 </div>
-                <span>{p.name} {currentUser?.id === p.id ? '(You)' : ''}</span>
+                <span>
+                  {p.name} {currentUser?.id === p.id ? '(You)' : ''}
+                </span>
               </div>
             ))}
           </div>
@@ -757,7 +827,8 @@ const Room: React.FC = () => {
                     key={msg.id}
                     className={`message ${msg.senderId === currentUser?.id ? 'own-message' : ''}`}
                   >
-                    <strong>{msg.sender}: </strong>{msg.text}
+                    <strong>{msg.sender}: </strong>
+                    {msg.text}
                   </div>
                 ))
               )}
@@ -784,7 +855,7 @@ const Room: React.FC = () => {
         <label htmlFor="file-input">
           <div className="upload-icon">
             <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
             </svg>
           </div>
         </label>
@@ -793,12 +864,10 @@ const Room: React.FC = () => {
           type="file"
           multiple
           onChange={handleFileUpload}
-          disabled={isUploadingFile}
+          disabled={uploadStatuses.length > 0}
           style={{ display: 'none' }}
         />
-        <span>
-          {isUploadingFile ? 'Uploading...' : 'Drag and drop files here'}
-        </span>
+        <span>{uploadStatuses.length > 0 ? 'Uploading files...' : 'Drag and drop files here'}</span>
       </div>
     </div>
   );

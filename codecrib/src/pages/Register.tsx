@@ -1,7 +1,7 @@
 import React, { useState, ChangeEvent } from 'react';
 import './Register.css';
 import { Link, useNavigate } from 'react-router-dom';
-const base = import.meta.env.VITE_API_ENDPOINT
+const base = import.meta.env.VITE_API_ENDPOINT;
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -13,7 +13,7 @@ const Register: React.FC = () => {
   const [profilePic, setProfilePic] = useState<File | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false); 
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const navigate = useNavigate();
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -26,7 +26,12 @@ const Register: React.FC = () => {
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setProfilePic(e.target.files[0]);
+      const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setError('Profile picture must be less than 5MB.');
+        return;
+      }
+      setProfilePic(file);
     }
   };
 
@@ -34,7 +39,25 @@ const Register: React.FC = () => {
     e.preventDefault();
     setError('');
     setSuccess('');
-    setIsLoading(true); 
+    setIsLoading(true);
+
+    if (formData.name.length < 2) {
+      setError('Name must be at least 2 characters long.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setError('Please enter a valid email address.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      setIsLoading(false);
+      return;
+    }
 
     const data = new FormData();
     data.append('name', formData.name);
@@ -50,23 +73,22 @@ const Register: React.FC = () => {
       });
 
       const result = await response.json();
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
 
       if (response.ok) {
         localStorage.setItem('token', result.token);
-        setSuccess('Registration successful! Redirecting...');
-        setTimeout(() => navigate('/main'), 1500); 
+        setSuccess('Registration successful! You will be redirected to your dashboard shortly.');
+        setTimeout(() => navigate('/main'), 2000);
       } else {
-        // User-friendly error messages
         if (result.message === 'Email already registered') {
           setError('This email is already registered. Please use a different email or log in.');
         } else {
-          setError(result.message || 'Something went wrong. Please try again.');
+          setError(result.message || 'An error occurred during registration. Please try again.');
         }
       }
     } catch (err) {
-      setIsLoading(false); 
-      setError('Failed to connect to the server. Please check your internet connection.');
+      setIsLoading(false);
+      setError('Failed to connect to the server. Please check your internet connection and try again.');
     }
   };
 
@@ -103,11 +125,11 @@ const Register: React.FC = () => {
               type="text"
               id="name"
               name="name"
-              placeholder="Name"
+              placeholder="Enter your name"
               value={formData.name}
               onChange={handleChange}
               required
-              disabled={isLoading} 
+              disabled={isLoading}
             />
           </div>
 
@@ -131,7 +153,7 @@ const Register: React.FC = () => {
               type="password"
               id="password"
               name="password"
-              placeholder="Password"
+              placeholder="Create a password"
               value={formData.password}
               onChange={handleChange}
               required
@@ -158,7 +180,7 @@ const Register: React.FC = () => {
           </div>
 
           <div className="remember-me">
-            <div className="checkbox-container">
+            <label>
               <input
                 type="checkbox"
                 id="rememberMe"
@@ -168,8 +190,8 @@ const Register: React.FC = () => {
                 disabled={isLoading}
               />
               <span className="checkmark"></span>
-            </div>
-            <label htmlFor="rememberMe">Remember me</label>
+              Remember me
+            </label>
           </div>
 
           <button type="submit" className="btn-register" disabled={isLoading}>

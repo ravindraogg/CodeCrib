@@ -1,20 +1,30 @@
 import React, { useEffect, useState, Suspense, useRef, useMemo, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './MainPage.css';
-import FileItem from '../FileItem'; 
-const base = import.meta.env.VITE_API_ENDPOINT
+import FileItem from '../FileItem';
+import io from 'socket.io-client';
+
+const base = import.meta.env.VITE_API_ENDPOINT;
+
+interface File {
+  fileId: string;
+  name: string;
+  ext: string;
+  lines: number;
+  read: boolean;
+}
 
 interface Room {
   id: string;
   mostUsedLanguage?: string;
   dateTime: string;
-  files: string[];
+  files: File[];
 }
 
 interface User {
   name: string;
   email: string;
-  profilePic?: string;
+  profilePicId?: string;
 }
 
 interface FileExtensionCount {
@@ -24,15 +34,20 @@ interface FileExtensionCount {
 interface RoomCardProps {
   room: Room;
   index: number;
-  loadedFiles: string[];
+  loadedFiles: File[];
   isLoading: boolean;
+  isRoomLoading: boolean;
   handleRoomClick: (roomId: string) => void;
   loadMoreFiles: (roomId: string, e: React.MouseEvent) => void;
-  formatFileName: (fileName: string) => string;
+  formatFileName: (file: File) => string;
   formatDateTime: (dateTimeString: string) => { date: string, time: string };
 }
 
-const RoomCard = memo(({ room, index, loadedFiles, isLoading, handleRoomClick, loadMoreFiles, formatFileName, formatDateTime }: RoomCardProps) => {
+const RoomCard = memo(({ room, index, loadedFiles, isLoading, isRoomLoading, handleRoomClick, loadMoreFiles, formatFileName, formatDateTime }: RoomCardProps) => {
+  if (isRoomLoading) {
+    return <div className="room-card-loading"></div>;
+  }
+
   const currentFiles = loadedFiles || room.files.slice(0, 5);
   const remainingFiles = room.files.slice(currentFiles.length);
   const { date, time } = formatDateTime(room.dateTime);
@@ -65,7 +80,9 @@ const RoomCard = memo(({ room, index, loadedFiles, isLoading, handleRoomClick, l
         <Suspense fallback={<div className="file-loading">Loading files...</div>}>
           {currentFiles.length > 0 ? (
             currentFiles.map((file, fileIndex) => (
-              <FileItem key={fileIndex} fileName={formatFileName(file)} />
+              <div key={file.fileId || `${file.name}-${fileIndex}`} className="file-item">
+                <FileItem fileName={formatFileName(file)} />
+              </div>
             ))
           ) : (
             <div className="no-files">No files in this room</div>
@@ -98,11 +115,14 @@ const MainPage: React.FC = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [roomIdToJoin, setRoomIdToJoin] = useState('');
-  const [loadedFiles, setLoadedFiles] = useState<Record<string, string[]>>({}); 
-  const [visibleRoomCount, setVisibleRoomCount] = useState(9); 
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
+  const [loadedFiles, setLoadedFiles] = useState<Record<string, File[]>>({});
+  const [roomLoadingStatus, setRoomLoadingStatus] = useState<Record<string, boolean>>({});
+  const [visibleRoomCount, setVisibleRoomCount] = useState(9);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadMoreButtonRef = useRef<HTMLButtonElement>(null);
+  const socketRef = useRef<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -111,7 +131,19 @@ const MainPage: React.FC = () => {
       return;
     }
 
-    const fetchUserProfile = async () => {
+    // Initialize socket connection
+    socketRef.current = io(`${base}`, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    socketRef.current.on('connect_error', (error: { message: any }) => {
+      console.error('Socket connection error:', error.message);
+    });
+
+    // Fetch user profile and join all rooms
+    const fetchUserProfileAndJoinRooms = async () => {
       try {
         const response = await fetch(`${base}/api/profile`, {
           method: 'GET',
@@ -125,21 +157,64 @@ const MainPage: React.FC = () => {
           setUser({
             name: userData.name || 'User',
             email: userData.email || '',
-            profilePic: userData.profilePic,
+            profilePicId: userData.profilePicId,
           });
+
+          // Fetch rooms to join their socket rooms
+          const roomsResponse = await fetch(`${base}/api/rooms?page=1&limit=100`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (roomsResponse.ok) {
+            const roomsData = await roomsResponse.json();
+            roomsData.rooms.forEach((room: any) => {
+              socketRef.current.emit('joinRoom', {
+                roomId: room.id,
+                userId: userData._id,
+                userName: userData.name,
+              });
+            });
+          }
         } else {
           throw new Error('Invalid token');
         }
       } catch (err) {
         console.error('Failed to fetch user profile:', err);
-        setError('Session expired. Please log in again.');
+        setError('Your session has expired. Please log in again.');
         localStorage.removeItem('token');
         navigate('/login');
       }
     };
 
-    fetchUserProfile();
+    fetchUserProfileAndJoinRooms();
     fetchRoomHistory(1);
+
+    // Listen for new file uploads
+    socketRef.current.on('newFile', (file: File & { roomId: string }) => {
+      console.log('New file received via socket:', file);
+      setRooms((prevRooms) =>
+        prevRooms.map((room) => {
+          if (room.id === file.roomId) {
+            const updatedFiles = [...room.files, { ...file, read: false }];
+            const mostUsedLanguage = determineMostUsedLanguage(updatedFiles);
+            return { ...room, files: updatedFiles, mostUsedLanguage };
+          }
+          return room;
+        })
+      );
+      setLoadedFiles((prev) => {
+        const roomFiles = prev[file.roomId] || [];
+        const updatedRoomFiles = [...roomFiles, { ...file, read: false }];
+        return { ...prev, [file.roomId]: updatedRoomFiles };
+      });
+    });
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -181,32 +256,42 @@ const MainPage: React.FC = () => {
       }
 
       const data = await response.json();
-      
+
       const sanitizedRooms = data.rooms.map((room: any) => {
+        setRoomLoadingStatus((prev) => ({ ...prev, [room.id]: true }));
         const files = Array.isArray(room.files) ? room.files : [];
-        const mostUsedLanguage = determineMostUsedLanguage(files);
-        
+        const fileDetails = files.map((file: any) => ({
+          fileId: file.fileId,
+          name: file.name || 'Unknown',
+          ext: file.ext || '',
+          lines: file.lines || 0,
+          read: file.read || false,
+        }));
+        const mostUsedLanguage = determineMostUsedLanguage(fileDetails);
+        setRoomLoadingStatus((prev) => ({ ...prev, [room.id]: false }));
         return {
           id: room.id || 'unknown',
-          mostUsedLanguage: mostUsedLanguage || 'JavaScript',
+          mostUsedLanguage: mostUsedLanguage || 'None',
           dateTime: room.dateTime || new Date().toISOString().split('T')[0],
-          files: files,
+          files: fileDetails,
         };
       });
 
       if (pageNum === 1) {
         setRooms(sanitizedRooms);
-        setLoadedFiles(sanitizedRooms.reduce((acc: any, room: { id: any; files: string[]; }) => ({ 
-          ...acc, 
-          [room.id]: room.files.slice(0, 5) 
-        }), {}));
+        setLoadedFiles(
+          sanitizedRooms.reduce((acc: any, room: Room) => ({
+            ...acc,
+            [room.id]: room.files.slice(0, 5),
+          }), {})
+        );
       } else {
         setRooms((prev) => [...prev, ...sanitizedRooms]);
         setLoadedFiles((prev) => ({
           ...prev,
-          ...sanitizedRooms.reduce((acc: any, room: { id: any; files: string[]; }) => ({ 
-            ...acc, 
-            [room.id]: room.files.slice(0, 5) 
+          ...sanitizedRooms.reduce((acc: any, room: Room) => ({
+            ...acc,
+            [room.id]: room.files.slice(0, 5),
           }), {}),
         }));
       }
@@ -214,22 +299,23 @@ const MainPage: React.FC = () => {
       setPage(pageNum);
     } catch (err: any) {
       console.error('Failed to fetch rooms:', err);
-      setError(err.message || 'Failed to load rooms. Please try again.');
+      setError('Failed to load rooms. Please try refreshing the page.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const loadMoreFiles = (roomId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); 
-    const room = rooms.find(r => r.id === roomId);
+    e.stopPropagation();
+    const room = rooms.find((r) => r.id === roomId);
     if (room) {
       const currentFiles = loadedFiles[roomId] || [];
       const remainingFiles = room.files.slice(currentFiles.length);
       if (remainingFiles.length > 0) {
+        const newFiles = remainingFiles.slice(0, Math.min(5, remainingFiles.length));
         setLoadedFiles((prev) => ({
           ...prev,
-          [roomId]: [...currentFiles, ...remainingFiles.slice(0, Math.min(5, remainingFiles.length))],
+          [roomId]: [...currentFiles, ...newFiles],
         }));
       }
     }
@@ -237,14 +323,15 @@ const MainPage: React.FC = () => {
 
   const loadMoreRooms = () => {
     setIsLoadingMore(true);
-    setVisibleRoomCount(prev => prev + 6);
+    setVisibleRoomCount((prev) => prev + 6);
     setIsLoadingMore(false);
   };
 
   const handleCreateRoom = async () => {
     setIsCreatingRoom(true);
+    setError('');
     const token = localStorage.getItem('token');
-    
+
     try {
       const response = await fetch(`${base}/api/rooms`, {
         method: 'POST',
@@ -263,18 +350,29 @@ const MainPage: React.FC = () => {
       }
 
       const data = await response.json();
+      setRooms((prev) => [
+        {
+          id: data.room.id,
+          mostUsedLanguage: 'JavaScript',
+          dateTime: new Date().toISOString(),
+          files: [],
+        },
+        ...prev,
+      ]);
       navigate(`/room/${data.room.id}`);
     } catch (err: any) {
       console.error('Failed to create room:', err);
-      setError(err.message || 'Failed to create room. Please try again.');
+      setError('Unable to create room. Please try again.');
     } finally {
       setIsCreatingRoom(false);
     }
   };
 
   const handleJoinRoom = async (roomId: string) => {
+    setJoiningRoomId(roomId);
+    setError('');
     const token = localStorage.getItem('token');
-    
+
     try {
       const response = await fetch(`${base}/api/rooms/${roomId}/join`, {
         method: 'POST',
@@ -292,7 +390,9 @@ const MainPage: React.FC = () => {
       navigate(`/room/${roomId}`);
     } catch (err: any) {
       console.error('Failed to join room:', err);
-      setError(err.message || 'Failed to join room. Please try again.');
+      setError('Unable to join room. Please check the room ID and try again.');
+    } finally {
+      setJoiningRoomId(null);
     }
   };
 
@@ -309,16 +409,24 @@ const MainPage: React.FC = () => {
     if (roomIdToJoin.trim()) {
       handleJoinRoom(roomIdToJoin.trim());
     } else {
-      setError('Please enter a room ID.');
+      setError('Please enter a valid room ID.');
     }
   };
 
-  const determineMostUsedLanguage = (files: string[]): string => {
+  const handleRefresh = () => {
+    setRooms([]);
+    setLoadedFiles({});
+    setPage(1);
+    setHasMore(true);
+    fetchRoomHistory(1);
+  };
+
+  const determineMostUsedLanguage = (files: File[]): string => {
     const extensionCounts: FileExtensionCount = {};
-    
-    files.forEach(file => {
-      const extension = file.split('.').pop()?.toLowerCase() || ''; 
-      let language = '';
+
+    files.forEach((file) => {
+      const extension = file.ext.toLowerCase();
+      let language = 'Other';
       switch (extension) {
         case 'js':
           language = 'JavaScript';
@@ -362,47 +470,61 @@ const MainPage: React.FC = () => {
         case 'kt':
           language = 'Kotlin';
           break;
+        case 'pdf':
+          language = 'PDF';
+          break;
+        case 'doc':
+        case 'docx':
+          language = 'Word';
+          break;
+        case 'xls':
+        case 'xlsx':
+          language = 'Excel';
+          break;
+        case 'zip':
+          language = 'Archive';
+          break;
         default:
-          language = extension.toUpperCase() || 'Unknown';
+          language = 'Other';
       }
-      
+
       extensionCounts[language] = (extensionCounts[language] || 0) + 1;
     });
-    
-    let mostUsedLanguage = 'JavaScript';
+
+    let mostUsedLanguage = 'None';
     let maxCount = 0;
-    
+
     Object.entries(extensionCounts).forEach(([language, count]) => {
       if (count > maxCount) {
         mostUsedLanguage = language;
         maxCount = count;
       }
     });
-    
+
     return mostUsedLanguage;
   };
 
-  const formatFileName = (fileName: string) => {
-    const parts = fileName.split('-');
-    return parts.length > 1 ? parts.slice(1).join('-') : fileName;
+  const formatFileName = (file: File) => {
+    const parts = file.name.split('-');
+    return parts.length > 1 ? parts.slice(1).join('-') : file.name;
   };
 
   const formatDateTime = (dateTimeString: string) => {
     try {
       const date = new Date(dateTimeString);
-      
+
       const formattedDate = date.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
-        year: 'numeric'
+        year: 'numeric',
       });
-      
+
       const formattedTime = date.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-        hour12: true
+        hour12: true,
       });
-      
+
       return { date: formattedDate, time: formattedTime };
     } catch (err) {
       console.error('Error formatting date:', err);
@@ -417,13 +539,12 @@ const MainPage: React.FC = () => {
   return (
     <div className="main-container">
       <header className="header">
-      <Link to="/" style={{ textDecoration: 'none' }}>
-  <div className="logo">Code Crib</div>
-</Link>
-
+        <Link to="/" style={{ textDecoration: 'none' }}>
+          <div className="logo">Code Crib</div>
+        </Link>
         <div className="nav-buttons">
-          <button 
-            className="btn-create" 
+          <button
+            className="btn-create"
             onClick={handleCreateRoom}
             disabled={isCreatingRoom}
           >
@@ -437,19 +558,41 @@ const MainPage: React.FC = () => {
 
       {error && <p className="error-message">{error}</p>}
 
+      <div className="refresh-container">
+        <button className="btn-refresh" onClick={handleRefresh}>
+          Refresh Rooms
+        </button>
+      </div>
+
       <div className="user-profile">
         <div className="profile-pic">
-          {user.profilePic ? (
-            <img src={`${base}${user.profilePic}`} alt="Profile" className="profile-img" />
-          ) : (
-            <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
-            </svg>
-          )}
+          {user.profilePicId ? (
+            <img
+              src={`${base}/api/files/${user.profilePicId}`}
+              alt="Profile"
+              className="profile-img"
+              onError={(e) => {
+                console.error(`Failed to load profile pic for ${user.name}: ${user.profilePicId}`);
+                e.currentTarget.style.display = 'none';
+                const nextElement = e.currentTarget.nextSibling as HTMLElement;
+                if (nextElement) {
+                  nextElement.style.display = 'block';
+                }
+              }}
+            />
+          ) : null}
+          <svg
+            viewBox="0 0 24 24"
+            fill="white"
+            width="24"
+            height="24"
+            style={{ display: user.profilePicId ? 'none' : 'block' }}
+          >
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+          </svg>
         </div>
         <div className="user-name">{user.name}</div>
       </div>
-
 
       <div className="join-room-container">
         <h3>Join Room</h3>
@@ -459,13 +602,14 @@ const MainPage: React.FC = () => {
           placeholder="Enter Room ID"
           value={roomIdToJoin}
           onChange={(e) => setRoomIdToJoin(e.target.value)}
+          disabled={!!joiningRoomId}
         />
         <button
           className="join-room-btn"
           onClick={handleJoinRoomById}
-          disabled={!roomIdToJoin.trim()}
+          disabled={!!joiningRoomId || !roomIdToJoin.trim()}
         >
-          Join
+          {joiningRoomId ? 'Joining...' : 'Join'}
         </button>
       </div>
 
@@ -473,8 +617,8 @@ const MainPage: React.FC = () => {
         <div className="no-rooms-container">
           <div className="no-rooms">
             <p>No rooms created yet.</p>
-            <button 
-              className="btn-create-room-first" 
+            <button
+              className="btn-create-room-first"
               onClick={handleCreateRoom}
               disabled={isCreatingRoom}
             >
@@ -491,6 +635,7 @@ const MainPage: React.FC = () => {
               index={index}
               loadedFiles={loadedFiles[room.id]}
               isLoading={isLoading}
+              isRoomLoading={roomLoadingStatus[room.id] || false}
               handleRoomClick={handleRoomClick}
               loadMoreFiles={loadMoreFiles}
               formatFileName={formatFileName}
@@ -502,9 +647,9 @@ const MainPage: React.FC = () => {
 
       {visibleRoomCount < rooms.length && (
         <div className="global-load-more">
-          <button 
-            className="load-more-btn" 
-            onClick={loadMoreRooms} 
+          <button
+            className="load-more-btn"
+            onClick={loadMoreRooms}
             disabled={isLoadingMore}
             ref={loadMoreButtonRef}
           >
