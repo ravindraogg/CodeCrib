@@ -200,7 +200,7 @@ Aspiring developers often lack access to a beginner-friendly and structured plat
 |---------------|--------------------------------------|--------|
 | **Ravindra S** | [ravindraog](https://github.com/ravindraog) | <img src="https://avatars.githubusercontent.com/u/149950829?s=400&u=1988b4718b3d5d96d2bde79fe24333508a10d0c9&v=4" width="80" height="80" style="border-radius:50%"/> |
 | **Nitesh**     | [PanatiNitesh](https://github.com/PanatiNitesh) | <img src="https://avatars.githubusercontent.com/u/134051960?v=4" width="80" height="80" style="border-radius:50%"/> |
-| **Masood**     | _Masood_ | <img src="https://avatars.githubusercontent.com/u/424443?v=4" width="80" height="80" style="border-radius:50%"/> |
+| **Masood**     | _Masood_ | <img src="https://instagram.fblr1-8.fna.fbcdn.net/v/t51.2885-19/499131789_17908172475149185_751939665111374926_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_ht=instagram.fblr1-8.fna.fbcdn.net&_nc_cat=101&_nc_oc=Q6cZ2QHXvXha2IXWQHEfxBPkp0eFZZE3vDVmtworw13_v5BKErnC27cGov1NFdOTfACrQEQ5NsNAI3LoCdUsU0jm-Xbp&_nc_ohc=9rqBfTlwA_EQ7kNvwEHbcwZ&_nc_gid=TymtnahDiFDo-UPBItTYZQ&edm=ALGbJPMBAAAA&ccb=7-5&oh=00_AfIMz_IYL8pfvUgVfmYkZDmqcfJFUFtNO4nlySWbiXUwCg&oe=68407AAF&_nc_sid=7d3ac5" width="80" height="80" style="border-radius:50%"/> |
 | **Vedanth**    | _Vedanth_ | <img src="https://avatars.githubusercontent.com/u/424443?v=4" width="80" height="80" style="border-radius:50%"/> |
 
 ## 📄 License
