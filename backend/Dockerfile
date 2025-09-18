@@ -6,7 +6,6 @@ COPY package*.json ./
 RUN npm install
 
 COPY server.js ./
-COPY Uploads ./Uploads
 
 ENV NODE_ENV=production
 
